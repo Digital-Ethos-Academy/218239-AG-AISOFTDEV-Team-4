@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "persona": "Emma, The Busy Professional",
+    "user_story": "As a busy professional, I want to quickly log my mood each day with customizable options, so that I can efficiently track my emotional state without interrupting my schedule.",
+    "acceptance_criteria": [
+      "Given I open the app, When I tap on the mood check-in, Then I can select from a list of mood options or add my own custom mood.",
+      "Given I have logged my mood, When I return to the home screen, Then my mood entry is saved and visible for today."
+    ]
+  },
+  {
+    "id": 2,
+    "persona": "Emma, The Busy Professional",
+    "user_story": "As a busy professional, I want to view analytics and trends about my moods, so that I can identify stress triggers and patterns over time.",
+    "acceptance_criteria": [
+      "Given I have logged moods for at least a week, When I view the analytics section, Then I see charts or graphs showing my most common moods and mood changes over time.",
+      "Given I select a specific mood, When I view details, Then I see associated tags or triggers from my entries."
+    ]
+  },
+  {
+    "id": 3,
+    "persona": "Carlos, The College Student",
+    "user_story": "As a college student, I want to use guided journaling prompts, so that I can reflect more deeply on my experiences and emotions.",
+    "acceptance_criteria": [
+      "Given I start a new journal entry, When I choose guided prompts, Then the app presents me with relevant questions or topics to write about.",
+      "Given I complete a prompt, When I save my entry, Then my responses are stored and can be reviewed later."
+    ]
+  }
+
+]
