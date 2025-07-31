@@ -80,10 +80,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     
 MOOD_PROMPT_MAP = {
-    "angry": "What made you feel angry today?",
+    "very_sad": "What has been weighing heavily on your heart?",
     "sad": "What's been bothering you lately?",
     "neutral": "How do you feel about today's events?",
-    "content": "What made today feel calm or balanced?",
     "happy": "What brought you joy today?",
     "very_happy": "What amazing thing happened today?"
 }
@@ -275,7 +274,7 @@ def login(login: LoginRequest, db: Session = Depends(get_db)):
         "message": "Login successful",
         "user_id": user.id,
         "display_name": user.display_name,
-        "token": token  # 🔐 Replace fake token with real one
+        "token": token
     }
 
 # =====================
