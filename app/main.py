@@ -1,16 +1,42 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
+from jose import JWTError, jwt
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Text, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from passlib.context import CryptContext
+from fastapi.middleware.cors import CORSMiddleware
+from enum import Enum
 
 # =====================
 #   FastAPI Setup
 # =====================
 app = FastAPI()
+
+origins = [
+    "http://localhost:3000"  # React dev server
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# =====================
+#   JWT Setup
+# =====================
+SECRET_KEY = "demo-secret-key"  # Replace with a secure env var in production
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # =====================
 #   Database Setup
@@ -20,13 +46,57 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        user = db.query(UserDB).filter(UserDB.id == int(user_id)).first()
+        if user is None:
+            raise credentials_exception
+        return user
+    except JWTError:
+        raise credentials_exception
+    
+MOOD_PROMPT_MAP = {
+    "angry": "What made you feel angry today?",
+    "sad": "What's been bothering you lately?",
+    "neutral": "How do you feel about today's events?",
+    "content": "What made today feel calm or balanced?",
+    "happy": "What brought you joy today?",
+    "very_happy": "What amazing thing happened today?"
+}
+
+@app.on_event("startup")
+def seed_prompts():
+    db = SessionLocal()
+    for mood, text in MOOD_PROMPT_MAP.items():
+        if not db.query(PromptDB).filter(PromptDB.prompt_text == text).first():
+            db.add(PromptDB(prompt_text=text, created_at=datetime.utcnow()))
+    db.commit()
+    db.close()
+
 
 # =====================
 #   SQLAlchemy MODELS
@@ -77,55 +147,55 @@ class UserBase(BaseModel):
     email: EmailStr
     display_name: Optional[str] = None
 
-
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6)
-
 
 class User(UserBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime]
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
 class MoodBase(BaseModel):
-    user_id: int
     mood: str
     mood_date: date
-
-
-class MoodCreate(MoodBase):
-    pass
-
 
 class Mood(MoodBase):
     id: int
     created_at: datetime
 
+class MoodLevel(str, Enum):
+    angry = "angry"
+    very_sad = "very_sad"
+    sad = "sad"
+    neutral = "neutral"
+    happy = "happy"
+    very_happy = "very_happy"
+
+class MoodBase(BaseModel):
+    mood: MoodLevel
+    mood_date: date
 
 class PromptBase(BaseModel):
     prompt_text: str
 
-
 class PromptCreate(PromptBase):
     pass
-
 
 class Prompt(PromptBase):
     id: int
     created_at: datetime
 
-
 class JournalBase(BaseModel):
-    user_id: int
     prompt_id: Optional[int] = None
     entry_date: date
     content: str
 
-
 class JournalCreate(JournalBase):
     pass
-
 
 class Journal(JournalBase):
     id: int
@@ -142,7 +212,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     now = datetime.utcnow()
     db_user = UserDB(
         email=user.email,
-        password_hash=user.password,
+        password_hash=hash_password(user.password),
         display_name=user.display_name,
         created_at=now,
         updated_at=now,
@@ -152,6 +222,9 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(db_user)
     return User(**db_user.__dict__)
 
+@app.get("/users/me", response_model=User)
+def read_users_me(current_user: UserDB = Depends(get_current_user)):
+    return User(**{k: v for k, v in current_user.__dict__.items() if k != "password_hash" and not k.startswith("_")})
 
 @app.get("/users/", response_model=List[User])
 def list_users(db: Session = Depends(get_db)):
@@ -191,73 +264,58 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"msg": "Deleted"}
 
+@app.post("/login")
+def login(login: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter(UserDB.email == login.email).first()
+    if not user or not verify_password(login.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_access_token(data={"sub": str(user.id)})
+    return {
+        "message": "Login successful",
+        "user_id": user.id,
+        "display_name": user.display_name,
+        "token": token  # 🔐 Replace fake token with real one
+    }
+
 # =====================
 #   MOODS ENDPOINTS
 # =====================
 
-@app.post("/moods/", response_model=Mood)
-def create_mood(mood: MoodCreate, db: Session = Depends(get_db)):
-    if not db.query(UserDB).filter(UserDB.id == mood.user_id).first():
-        raise HTTPException(status_code=400, detail="User does not exist")
+@app.post("/moods/", response_model=dict)
+def create_mood(
+    mood: MoodBase,
+    db: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
     db_mood = MoodDB(
-        user_id=mood.user_id,
-        mood=mood.mood,
+        user_id=current_user.id,
+        mood=mood.mood.value,
         mood_date=mood.mood_date,
         created_at=datetime.utcnow()
     )
     db.add(db_mood)
     db.commit()
     db.refresh(db_mood)
-    return Mood(**db_mood.__dict__)
 
+    prompt_text = MOOD_PROMPT_MAP[mood.mood.value]
+    return {
+        "mood": Mood(**db_mood.__dict__),
+        "prompt": prompt_text
+    }
 
 @app.get("/moods/", response_model=List[Mood])
-def list_moods(db: Session = Depends(get_db)):
-    return [Mood(**m.__dict__) for m in db.query(MoodDB).all()]
+def list_moods(
+    db: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    moods = db.query(MoodDB).filter(MoodDB.user_id == current_user.id).all()
+    return [Mood(**m.__dict__) for m in moods]
 
-
-@app.get("/moods/{mood_id}", response_model=Mood)
-def get_mood(mood_id: int, db: Session = Depends(get_db)):
-    mood = db.query(MoodDB).filter(MoodDB.id == mood_id).first()
-    if not mood:
-        raise HTTPException(status_code=404, detail="Mood not found")
-    return Mood(**mood.__dict__)
-
-
-@app.put("/moods/{mood_id}", response_model=Mood)
-def update_mood(mood_id: int, mood: MoodBase, db: Session = Depends(get_db)):
-    db_mood = db.query(MoodDB).filter(MoodDB.id == mood_id).first()
-    if not db_mood:
-        raise HTTPException(status_code=404, detail="Mood not found")
-    db_mood.user_id = mood.user_id
-    db_mood.mood = mood.mood
-    db_mood.mood_date = mood.mood_date
-    db.commit()
-    db.refresh(db_mood)
-    return Mood(**db_mood.__dict__)
-
-
-@app.delete("/moods/{mood_id}")
-def delete_mood(mood_id: int, db: Session = Depends(get_db)):
-    mood = db.query(MoodDB).filter(MoodDB.id == mood_id).first()
-    if not mood:
-        raise HTTPException(status_code=404, detail="Mood not found")
-    db.delete(mood)
-    db.commit()
-    return {"msg": "Deleted"}
 
 # =====================
 #   PROMPTS ENDPOINTS
 # =====================
-
-@app.post("/prompts/", response_model=Prompt)
-def create_prompt(prompt: PromptCreate, db: Session = Depends(get_db)):
-    db_prompt = PromptDB(prompt_text=prompt.prompt_text, created_at=datetime.utcnow())
-    db.add(db_prompt)
-    db.commit()
-    db.refresh(db_prompt)
-    return Prompt(**db_prompt.__dict__)
-
 
 @app.get("/prompts/", response_model=List[Prompt])
 def list_prompts(db: Session = Depends(get_db)):
@@ -271,40 +329,16 @@ def get_prompt(prompt_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Prompt not found")
     return Prompt(**prompt.__dict__)
 
-
-@app.put("/prompts/{prompt_id}", response_model=Prompt)
-def update_prompt(prompt_id: int, prompt: PromptBase, db: Session = Depends(get_db)):
-    db_prompt = db.query(PromptDB).filter(PromptDB.id == prompt_id).first()
-    if not db_prompt:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    db_prompt.prompt_text = prompt.prompt_text
-    db.commit()
-    db.refresh(db_prompt)
-    return Prompt(**db_prompt.__dict__)
-
-
-@app.delete("/prompts/{prompt_id}")
-def delete_prompt(prompt_id: int, db: Session = Depends(get_db)):
-    db.query(JournalDB).filter(JournalDB.prompt_id == prompt_id).delete()
-    prompt = db.query(PromptDB).filter(PromptDB.id == prompt_id).first()
-    if not prompt:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    db.delete(prompt)
-    db.commit()
-    return {"msg": "Deleted"}
-
 # =====================
 #   JOURNAL ENDPOINTS
 # =====================
 
 @app.post("/journal/", response_model=Journal)
-def create_journal(journal: JournalCreate, db: Session = Depends(get_db)):
-    if not db.query(UserDB).filter(UserDB.id == journal.user_id).first():
-        raise HTTPException(status_code=400, detail="User does not exist")
+def create_journal(journal: JournalCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     if journal.prompt_id and not db.query(PromptDB).filter(PromptDB.id == journal.prompt_id).first():
         raise HTTPException(status_code=400, detail="Prompt does not exist")
     db_journal = JournalDB(
-        user_id=journal.user_id,
+        user_id=current_user.id,
         prompt_id=journal.prompt_id,
         entry_date=journal.entry_date,
         content=journal.content,
@@ -315,28 +349,24 @@ def create_journal(journal: JournalCreate, db: Session = Depends(get_db)):
     db.refresh(db_journal)
     return Journal(**db_journal.__dict__)
 
-
 @app.get("/journal/", response_model=List[Journal])
-def list_journals(db: Session = Depends(get_db)):
-    return [Journal(**j.__dict__) for j in db.query(JournalDB).all()]
-
+def list_journals(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    return [Journal(**j.__dict__) for j in db.query(JournalDB).filter(JournalDB.user_id == current_user.id).all()]
 
 @app.get("/journal/{journal_id}", response_model=Journal)
-def get_journal(journal_id: int, db: Session = Depends(get_db)):
-    journal = db.query(JournalDB).filter(JournalDB.id == journal_id).first()
+def get_journal(journal_id: int, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    journal = db.query(JournalDB).filter(JournalDB.id == journal_id, JournalDB.user_id == current_user.id).first()
     if not journal:
         raise HTTPException(status_code=404, detail="Journal not found")
     return Journal(**journal.__dict__)
 
-
 @app.put("/journal/{journal_id}", response_model=Journal)
-def update_journal(journal_id: int, journal: JournalBase, db: Session = Depends(get_db)):
-    db_journal = db.query(JournalDB).filter(JournalDB.id == journal_id).first()
+def update_journal(journal_id: int, journal: JournalBase, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    db_journal = db.query(JournalDB).filter(JournalDB.id == journal_id, JournalDB.user_id == current_user.id).first()
     if not db_journal:
         raise HTTPException(status_code=404, detail="Journal not found")
     if journal.prompt_id and not db.query(PromptDB).filter(PromptDB.id == journal.prompt_id).first():
         raise HTTPException(status_code=400, detail="Prompt does not exist")
-    db_journal.user_id = journal.user_id
     db_journal.prompt_id = journal.prompt_id
     db_journal.entry_date = journal.entry_date
     db_journal.content = journal.content
@@ -344,10 +374,9 @@ def update_journal(journal_id: int, journal: JournalBase, db: Session = Depends(
     db.refresh(db_journal)
     return Journal(**db_journal.__dict__)
 
-
 @app.delete("/journal/{journal_id}")
-def delete_journal(journal_id: int, db: Session = Depends(get_db)):
-    journal = db.query(JournalDB).filter(JournalDB.id == journal_id).first()
+def delete_journal(journal_id: int, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    journal = db.query(JournalDB).filter(JournalDB.id == journal_id, JournalDB.user_id == current_user.id).first()
     if not journal:
         raise HTTPException(status_code=404, detail="Journal not found")
     db.delete(journal)
