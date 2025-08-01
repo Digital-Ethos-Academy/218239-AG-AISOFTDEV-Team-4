@@ -7,7 +7,7 @@ import SignUpForm from './SignUpForm';
 
 const App = () => {
   return (
-    <div className='min-h-screen flex items-center justify-center bg-gray-100 p-4'>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-200 to-blue-100 p-4">
       <Routes>
         <Route path="/" element={<LoginForm />} />
         <Route path="/signup" element={<SignUpForm />} />

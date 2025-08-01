@@ -13,7 +13,6 @@ const SignUpForm = () => {
     setErrorMsg('');
 
     try {
-      // Step 1: Create user
       const res = await fetch('http://localhost:8000/users/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,7 +25,6 @@ const SignUpForm = () => {
         return;
       }
 
-      // Step 2: Login after signup
       const loginRes = await fetch('http://localhost:8000/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -40,12 +38,10 @@ const SignUpForm = () => {
 
       const { token, user_id, display_name } = await loginRes.json();
 
-      // Step 3: Store token and user info
       localStorage.setItem('token', token);
       localStorage.setItem('user_id', user_id);
       localStorage.setItem('display_name', display_name);
 
-      // Step 4: Redirect to mood page
       navigate('/mood');
     } catch (err) {
       console.error(err);
@@ -54,53 +50,70 @@ const SignUpForm = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 border rounded shadow bg-white">
-      <h2 className="text-2xl font-semibold mb-4 text-center">Sign Up</h2>
-      {errorMsg && <p className="text-red-600 mb-2">{errorMsg}</p>}
-      <form onSubmit={handleSubmit}>
-        <label className="block mb-3">
-          <span className="text-sm">Email</span>
+    <div className="bg-white/80 backdrop-blur-md p-10 rounded-2xl shadow-xl w-full max-w-md mx-auto mt-20">
+      <div className="text-center mb-6">
+        <div className="inline-block bg-green-400 p-2 rounded-full shadow">
+          <span role="img" aria-label="leaf" style={{ fontSize: '24px' }}>
+            💚
+          </span>
+        </div>
+        <h2 className="text-3xl font-bold text-gray-800 mt-2 tracking-tight">
+          Create Your Account
+        </h2>
+      </div>
+
+      {errorMsg && (
+        <p className="text-red-600 text-center text-sm mb-4">{errorMsg}</p>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <label className="block">
+          <span className="text-sm text-gray-700">Email</span>
           <input
             type="email"
             autoComplete="email"
-            className="w-full p-2 border rounded mt-1"
+            className="w-full px-4 py-2 mt-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 transition"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </label>
-        <label className="block mb-3">
-          <span className="text-sm">Display Name</span>
+
+        <label className="block">
+          <span className="text-sm text-gray-700">Display Name</span>
           <input
             type="text"
             autoComplete="nickname"
-            className="w-full p-2 border rounded mt-1"
+            className="w-full px-4 py-2 mt-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 transition"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             required
           />
         </label>
-        <label className="block mb-3">
-          <span className="text-sm">Password</span>
+
+        <label className="block">
+          <span className="text-sm text-gray-700">Password</span>
           <input
             type="password"
             autoComplete="new-password"
-            className="w-full p-2 border rounded mt-1"
+            className="w-full px-4 py-2 mt-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 transition"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
         </label>
+
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+          className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition"
         >
-          Create Account
+          Sign Up
         </button>
       </form>
-      <p className="mt-4 text-sm text-center">
+
+      <p className="mt-6 text-sm text-center text-gray-600">
         Already have an account?{' '}
-        <Link to="/login" className="text-blue-500 hover:underline">
+        <Link to="/" className="text-green-600 font-medium hover:underline">
           Log in here
         </Link>
       </p>

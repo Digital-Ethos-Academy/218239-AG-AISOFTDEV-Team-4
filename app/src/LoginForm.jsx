@@ -2,19 +2,19 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Logo = () => (
-  <div className='flex items-center mb-8'>
-    <div className='bg-teal-500 p-2 rounded-full'>
+  <div className='flex items-center justify-center mb-8'>
+    <div className='bg-green-400 p-2 rounded-full shadow-md'>
       <span role='img' aria-label='logo' style={{ fontSize: '24px' }}>
         💚
       </span>
     </div>
-    <h1 className='text-3xl font-bold text-gray-800 ml-2'>MindfulDay</h1>
+    <h1 className='text-3xl font-bold text-gray-800 ml-3 tracking-tight'>MindfulDay</h1>
   </div>
 );
 
 const InputField = ({ type, id, label, placeholder, value, onChange }) => (
-  <div className='mb-4'>
-    <label htmlFor={id} className='block text-sm font-medium text-gray-700'>
+  <div className='mb-5'>
+    <label htmlFor={id} className='block text-sm font-medium text-gray-700 mb-1'>
       {label}
     </label>
     <input
@@ -22,7 +22,7 @@ const InputField = ({ type, id, label, placeholder, value, onChange }) => (
       id={id}
       value={value}
       onChange={onChange}
-      className='mt-1 p-2 block w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500'
+      className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 transition'
       placeholder={placeholder}
       required
     />
@@ -33,8 +33,10 @@ const LoginButton = ({ loading }) => (
   <button
     type='submit'
     disabled={loading}
-    className={`w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition ${
-      loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'
+    className={`w-full py-2 text-white font-semibold rounded-lg transition ${
+      loading
+        ? 'bg-green-300 cursor-not-allowed'
+        : 'bg-green-500 hover:bg-green-600'
     }`}
   >
     {loading ? 'Logging in...' : 'Log in'}
@@ -67,7 +69,7 @@ const LoginForm = () => {
       localStorage.setItem('display_name', data.display_name);
       localStorage.setItem('user_id', data.user_id);
 
-      navigate('/mood'); // go to mood page on success
+      navigate('/mood');
     } catch (err) {
       alert(err.message || 'Login failed');
     } finally {
@@ -76,15 +78,17 @@ const LoginForm = () => {
   };
 
   return (
-    <div className='bg-white p-8 rounded-lg shadow-lg w-full max-w-md'>
+    <div className='bg-white/80 backdrop-blur-md p-10 rounded-2xl shadow-xl w-full max-w-md mx-auto mt-20'>
       <Logo />
-      <h2 className='text-2xl font-bold text-center mb-6'>Login</h2>
+      <h2 className='text-xl font-semibold text-center text-gray-700 mb-6'>
+        Welcome back! Please log in.
+      </h2>
       <form onSubmit={handleSubmit}>
         <InputField
           type='email'
           id='email'
           label='Email'
-          placeholder='Enter your email'
+          placeholder='you@example.com'
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -92,19 +96,19 @@ const LoginForm = () => {
           type='password'
           id='password'
           label='Password'
-          placeholder='Enter your password'
+          placeholder='••••••••'
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
         <LoginButton loading={loading} />
       </form>
-      <p className='mt-6 text-center text-sm text-gray-600'>
+      <p className='mt-6 text-sm text-center text-gray-600'>
         Don’t have an account?{' '}
         <button
           onClick={() => navigate('/signup')}
-          className='text-blue-600 font-medium hover:underline'
+          className='text-green-600 font-medium hover:underline'
         >
-          Sign up
+          Sign up here
         </button>
       </p>
     </div>
@@ -112,3 +116,4 @@ const LoginForm = () => {
 };
 
 export default LoginForm;
+
