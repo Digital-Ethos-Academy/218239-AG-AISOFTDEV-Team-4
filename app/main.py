@@ -11,6 +11,11 @@ from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from fastapi.middleware.cors import CORSMiddleware
 from enum import Enum
+from openai import OpenAI  # or your preferred LLM library
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # =====================
 #   FastAPI Setup
@@ -27,6 +32,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key)
 
 # =====================
 #   JWT Setup
@@ -287,6 +295,19 @@ def create_mood(
     db: Session = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
 ):
+    # Check if a mood already exists for this user on this date
+    existing_mood = db.query(MoodDB).filter(
+        MoodDB.user_id == current_user.id,
+        MoodDB.mood_date == mood.mood_date
+    ).first()
+
+    if existing_mood:
+        raise HTTPException(
+            status_code=400,
+            detail=f"You've already logged a mood for {mood.mood_date}."
+        )
+
+    # If not, continue as normal
     db_mood = MoodDB(
         user_id=current_user.id,
         mood=mood.mood.value,
@@ -302,6 +323,7 @@ def create_mood(
         "mood": Mood(**db_mood.__dict__),
         "prompt": prompt_text
     }
+
 
 @app.get("/moods/", response_model=List[Mood])
 def list_moods(
@@ -381,3 +403,24 @@ def delete_journal(journal_id: int, db: Session = Depends(get_db), current_user:
     db.delete(journal)
     db.commit()
     return {"msg": "Deleted"}
+
+@app.post("/journal/feedback", response_model=dict)
+async def get_journal_feedback(entry: dict):
+    journal_text = entry.get("content")
+    if not journal_text:
+        raise HTTPException(status_code=400, detail="Missing journal content")
+
+    prompt = f"""You are a helpful AI assistant for mental health journaling.
+    
+    Here is a journal entry from a user:
+    "{journal_text}"
+    
+    Summarize this journal in 1–2 sentences, and provide two reflective follow-up questions to help the user think more deeply."""
+
+    response = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    result = response.choices[0].message.content.strip()
+    return {"feedback": result}

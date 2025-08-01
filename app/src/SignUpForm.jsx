@@ -1,73 +1,109 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 
-const SignUpForm = ({ onLoginClick }) => {
+const SignUpForm = () => {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    try {
+      // Step 1: Create user
+      const res = await fetch('http://localhost:8000/users/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, display_name: displayName }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setErrorMsg(err.detail || 'Error creating user');
+        return;
+      }
+
+      // Step 2: Login after signup
+      const loginRes = await fetch('http://localhost:8000/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!loginRes.ok) {
+        setErrorMsg('User created, but login failed.');
+        return;
+      }
+
+      const { token, user_id, display_name } = await loginRes.json();
+
+      // Step 3: Store token and user info
+      localStorage.setItem('token', token);
+      localStorage.setItem('user_id', user_id);
+      localStorage.setItem('display_name', display_name);
+
+      // Step 4: Redirect to mood page
+      navigate('/mood');
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Unexpected error. Please try again.');
+    }
+  };
+
   return (
-    <div className='min-h-screen flex flex-col justify-center items-center bg-gray-100'>
-      <div className='flex flex-col items-center mb-8'>
-        <div className='text-3xl font-bold flex items-center mb-2'>
-          <span className='text-teal-600 mr-2'>❤️</span>
-          MindfulDay
-        </div>
-      </div>
-
-      <div className='bg-white p-8 rounded-lg shadow-md w-full max-w-md'>
-        <h1 className='text-2xl font-bold text-center mb-6'>Sign Up</h1>
-
-        <form>
-          <div className='mb-4'>
-            <label className='block text-sm font-medium mb-2' htmlFor='name'>
-              Name
-            </label>
-            <input
-              type='text'
-              id='name'
-              placeholder='Enter your name'
-              className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400'
-            />
-          </div>
-
-          <div className='mb-4'>
-            <label className='block text-sm font-medium mb-2' htmlFor='email'>
-              Email
-            </label>
-            <input
-              type='email'
-              id='email'
-              placeholder='Enter your email'
-              className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400'
-            />
-          </div>
-
-          <div className='mb-6'>
-            <label
-              className='block text-sm font-medium mb-2'
-              htmlFor='password'
-            >
-              Password
-            </label>
-            <input
-              type='password'
-              id='password'
-              placeholder='Create a password'
-              className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400'
-            />
-          </div>
-
-          <button className='w-full py-3 rounded-lg text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400'>
-            Sign up
-          </button>
-        </form>
-
-        <p className='mt-6 text-center text-sm text-gray-600'>
-          Already have an account?{' '}
-          <button
-            onClick={onLoginClick}
-            className='text-blue-500 hover:underline'
-          >
-            Log in
-          </button>
-        </p>
-      </div>
+    <div className="max-w-md mx-auto mt-10 p-6 border rounded shadow bg-white">
+      <h2 className="text-2xl font-semibold mb-4 text-center">Sign Up</h2>
+      {errorMsg && <p className="text-red-600 mb-2">{errorMsg}</p>}
+      <form onSubmit={handleSubmit}>
+        <label className="block mb-3">
+          <span className="text-sm">Email</span>
+          <input
+            type="email"
+            autoComplete="email"
+            className="w-full p-2 border rounded mt-1"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </label>
+        <label className="block mb-3">
+          <span className="text-sm">Display Name</span>
+          <input
+            type="text"
+            autoComplete="nickname"
+            className="w-full p-2 border rounded mt-1"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
+        </label>
+        <label className="block mb-3">
+          <span className="text-sm">Password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            className="w-full p-2 border rounded mt-1"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </label>
+        <button
+          type="submit"
+          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+        >
+          Create Account
+        </button>
+      </form>
+      <p className="mt-4 text-sm text-center">
+        Already have an account?{' '}
+        <Link to="/login" className="text-blue-500 hover:underline">
+          Log in here
+        </Link>
+      </p>
     </div>
   );
 };
