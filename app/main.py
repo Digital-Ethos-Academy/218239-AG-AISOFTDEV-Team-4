@@ -276,7 +276,7 @@ def login(login: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.email == login.email).first()
     if not user or not verify_password(login.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
+    
     token = create_access_token(data={"sub": str(user.id)})
     return {
         "message": "Login successful",
